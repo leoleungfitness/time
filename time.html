@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>時鐘計算小遊戲</title>
+  <style>
+    * {
+      margin: 0; padding: 0; box-sizing: border-box;
+      font-family: sans-serif;
+    }
+    body {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: flex-start; 
+      background: linear-gradient(to bottom right, #FDD835, #F57C00);
+      padding: 16px;
+    }
+    h1 {
+      margin-top: 16px;
+      color: #424242;
+      font-size: 26px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .sub-title {
+      margin-top: 8px;
+      font-size: 16px;
+      color: #666;
+      text-align: center;
+    }
+    .game-container {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      width: 360px; max-width: 90%;
+      margin-top: 24px;
+      padding: 20px;
+      text-align: center;
+    }
+    .question {
+      margin: 8px 0;
+      font-size: 20px;
+      color: #333;
+      font-weight: bold;
+    }
+    .answer-area {
+      margin: 16px 0;
+    }
+    .answer-area label {
+      display: block; margin: 8px 0 4px; color: #424242; font-weight: bold;
+    }
+    .answer-area input, .answer-area select {
+      width: 100%;
+      max-width: 120px;
+      margin: 0 auto 8px;
+      padding: 8px;
+      font-size: 16px;
+      text-align: center;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+    .btn-wrap {
+      margin-top: 8px;
+    }
+    button {
+      background: #EF6C00;
+      color: #fff;
+      padding: 10px 16px;
+      font-size: 16px;
+      border: none;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    button:hover {
+      background: #E65100;
+    }
+    .info {
+      margin-top: 12px; 
+      color: #333;
+      font-size: 16px;
+      min-height: 24px;
+    }
+    .solution {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #555;
+      text-align: left;
+      background: #fff;
+      padding: 12px;
+      border-radius: 8px;
+      line-height: 1.4;
+    }
+    .highlight {
+      color: #E65100; 
+      font-weight: bold;
+    }
+    /* 控制「開始下一題」按鈕的外觀 */
+    #nextBtn {
+      display: none; /* 一開始不顯示，答題後才顯示 */
+      margin-top: 16px;
+    }
+    @media (max-width: 480px) {
+      h1 { font-size: 22px; }
+      .question { font-size: 18px; }
+      .solution {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>時鐘計算小遊戲</h1>
+  <div class="sub-title">
+    例：12:45 PM 過了 35 分鐘，現在時間是多少？<br />
+    （答題後會顯示完整解題步驟～）
+  </div>
+
+  <div class="game-container">
+    <div class="question" id="question">問題：__:__ __ 再過 __ 分鐘 等於？</div>
+
+    <div class="answer-area">
+      <label for="hour">小時 (1~12)</label>
+      <input type="number" id="hour" min="1" max="12" placeholder="小時" />
+
+      <label for="minute">分鐘 (0~59)</label>
+      <input type="number" id="minute" min="0" max="59" placeholder="分鐘" />
+
+      <label for="ampm">AM/PM</label>
+      <select id="ampm">
+        <option value="AM">AM</option>
+        <option value="PM">PM</option>
+      </select>
+
+      <div class="btn-wrap">
+        <button onclick="checkAnswer()">確認答案</button>
+      </div>
+    </div>
+
+    <!-- 答對或答錯文字顯示 -->
+    <div class="info" id="info"></div>
+    <!-- 解題步驟容器 -->
+    <div class="solution" id="solution" style="display: none;"></div>
+
+    <!-- 新增「開始下一題」按鈕，等待孩子看完整解答後，再自由切換下一題 -->
+    <button id="nextBtn" onclick="generateQuestion()">開始下一題</button>
+  </div>
+
+  <script>
+    /*
+      1. 產生隨機時間(小時1~12、分鐘0~59、AM/PM) 和 "加 N 分鐘"(1~59)
+      2. 使用者輸入計算結果(時:分 AM/PM)
+      3. 結果對比，並提供解題步驟：
+         - 若 "12:45 PM + 35 分鐘" => 程式會顯示如何將 "12:45 PM" 轉 "12:45(24h=12:45)"、再 +35 分=13:20 => 1:20 PM
+      4. 小朋友看完解題步驟後，按「開始下一題」才進入下一題。
+    */
+
+    let startHour = 0;    // 1 ~ 12
+    let startMinute = 0;  // 0 ~ 59
+    let startAmPm = "AM"; // "AM" or "PM"
+    let addMinutes = 0;   // 1 ~ 59
+
+    // 正確答案(總分鐘)
+    let correctTotalMins = 0;
+
+    // 初始化題目
+    generateQuestion();
+
+    // 產生新題目
+    function generateQuestion() {
+      startHour = Math.floor(Math.random()*12) + 1;  
+      startMinute = Math.floor(Math.random()*60);    
+      startAmPm = (Math.random() < 0.5) ? "AM" : "PM";
+      addMinutes = Math.floor(Math.random()*59) + 1;
+
+      // 顯示題目
+      document.getElementById("question").textContent = 
+        `問題：${formatHour(startHour)}:${formatMinute(startMinute)} ${startAmPm} 再過 ${addMinutes} 分鐘 等於？`;
+
+      // 計算正解(以 24hr 的 "總分鐘" 來表示)
+      let startInMins = convertToTotalMins(startHour, startMinute, startAmPm);
+      correctTotalMins = (startInMins + addMinutes) % (24*60);
+
+      // 重置介面
+      document.getElementById("info").textContent = "";
+      document.getElementById("solution").style.display = "none";
+      document.getElementById("solution").textContent = "";
+
+      document.getElementById("hour").value = "";
+      document.getElementById("minute").value = "";
+      document.getElementById("ampm").value = "AM";
+
+      // 開始下一題按鈕重新隱藏
+      document.getElementById("nextBtn").style.display = "none";
+    }
+
+    // 按下「確認答案」按鈕
+    function checkAnswer() {
+      const userHour = parseInt(document.getElementById("hour").value);
+      const userMinute = parseInt(document.getElementById("minute").value);
+      const userAmPm = document.getElementById("ampm").value;
+      const infoDiv = document.getElementById("info");
+      const solDiv = document.getElementById("solution");
+
+      // 檢查輸入
+      if (isNaN(userHour) || userHour < 1 || userHour > 12) {
+        alert("小時請輸入1~12之間的數字");
+        return;
+      }
+      if (isNaN(userMinute) || userMinute < 0 || userMinute > 59) {
+        alert("分鐘請輸入0~59之間的數字");
+        return;
+      }
+
+      // 使用者輸入(轉成總分鐘)
+      const userTotalMins = convertToTotalMins(userHour, userMinute, userAmPm);
+
+      // 1) 對錯判斷
+      if (userTotalMins === correctTotalMins) {
+        infoDiv.textContent = "恭喜你，答對了！";
+      } else {
+        infoDiv.textContent = "答錯了～再看看解題步驟吧！";
+      }
+
+      // 2) 顯示解題步驟
+      const startInMins = convertToTotalMins(startHour, startMinute, startAmPm);
+      solDiv.innerHTML = buildSolutionExplanation(
+        startHour, 
+        startMinute, 
+        startAmPm,
+        addMinutes, 
+        startInMins, 
+        correctTotalMins
+      );
+      solDiv.style.display = "block";
+
+      // 3) 顯示「開始下一題」按鈕，讓孩子看完再自行按
+      document.getElementById("nextBtn").style.display = "inline-block";
+    }
+
+    // 建立解題步驟
+    function buildSolutionExplanation(sh, sm, sap, addM, startMins, correctMins) {
+      // 起始時間 (24小時制)
+      const start24h = Math.floor(startMins / 60);
+      const start24m = startMins % 60;
+
+      // 正確答案 (24小時制)
+      const end24h = Math.floor(correctMins / 60);
+      const end24m = correctMins % 60;
+
+      // 再轉回12小時制
+      const endObj = convertFromTotalMins(correctMins);
+
+      return `
+        <div>1. 將 <span class="highlight">${formatHour(sh)}:${formatMinute(sm)} ${sap}</span> 
+           轉成 24小時制：</div>
+        <div style="margin-left:1em;">
+          → <strong>${zeropad(start24h)}:${zeropad(start24m)}</strong>
+        </div>
+        <br />
+        <div>2. 加上 <span class="highlight">${addM}</span> 分鐘：</div>
+        <div style="margin-left:1em;">
+          → <strong>${zeropad(end24h)}:${zeropad(end24m)}</strong> (24小時制)
+        </div>
+        <br />
+        <div>3. 再轉回 12小時制：</div>
+        <div style="margin-left:1em;">
+          → <strong>${formatHour(endObj.hr)}:${formatMinute(endObj.min)} ${endObj.ampm}</strong>
+        </div>
+        <br />
+        <div>
+          所以 <span class="highlight">${formatHour(sh)}:${formatMinute(sm)} ${sap} + ${addM} 分鐘</span> 
+          = <span class="highlight">${formatHour(endObj.hr)}:${formatMinute(endObj.min)} ${endObj.ampm}</span>
+        </div>
+      `;
+    }
+
+    /* 工具函式：12hr->總分鐘(0~1439) */
+    function convertToTotalMins(hour, minute, ampm) {
+      let h24;
+      if (ampm === "AM") {
+        h24 = (hour === 12)? 0 : hour; // 12 AM -> 0點
+      } else {
+        h24 = (hour === 12)? 12 : hour + 12; // 12 PM -> 12點
+      }
+      return h24 * 60 + minute;
+    }
+
+    /* 工具函式：總分鐘->12小時制 */
+    function convertFromTotalMins(totalMins) {
+      const h24 = Math.floor(totalMins / 60);
+      const m = totalMins % 60;
+      const ap = (h24 < 12)? "AM" : "PM";
+      let hr12 = h24 % 12;
+      if (hr12 === 0) {
+        hr12 = 12;
+      }
+      return { hr: hr12, min: m, ampm: ap };
+    }
+
+    /* 輔助：補零 / 不補零 */
+    function formatHour(h) {
+      return h; // 小時不補零
+    }
+    function formatMinute(m) {
+      return (m<10)? ("0"+m) : m;
+    }
+    function zeropad(x) {
+      return (x<10)? ("0"+x) : x;
+    }
+  </script>
+</body>
+</html>
